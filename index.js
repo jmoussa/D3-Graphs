@@ -1,14 +1,13 @@
 // Function to compute density
-function kernelDensityEstimator(kernel, X) {
-  return function(V) {
-    return X.map(function(x) {
-      return [x, d3.mean(V, function(v) { return kernel(x - v); })];
+function kernelDensityEstimator(kernel, x, sample) {
+    return x.map(function(z) {
+      return [z, d3.mean(sample, function(v) { return kernel(z - v); })];
     });
-  };
 }
-function kernelEpanechnikov(k) {
-  return function(v) {
-    return Math.abs(v /= k) <= 1 ? 0.75 * (1 - v * v) / k : 0;
+
+function epanechnikovKernel(scale) {
+  return function(u) {
+    return Math.abs(u /= scale) <= 1 ? .75 * (1 - u * u) / scale : 0;
   };
 }
 
@@ -61,83 +60,105 @@ function sortArray(data){
     clean_arr.sort(function(a,b) {
         return a.percentile - b.percentile
     });
-    console.log(clean_arr.length)
+    console.log('CLEAN ARRAY LENGTH: ' + clean_arr.length)
     return clean_arr;
 }
-/*
-function plotDensity(data) {
+
+function plotDensity(data) {    
+    let case_objects_list = data.filter(c => c.x == 1)
+    let control_objects_list = data.filter(c => c.x == 0)
+    console.log('Cases ' + case_objects_list.length)
+    console.log('Controls ' + control_objects_list.length)
+    
     var svgWidth = 600, svgHeight = 400;
     var margin = {top: 30, right:50, bottom:70, left: 70};
     var width = svgWidth -  margin.left - margin.right;
     var height = svgHeight - margin.top - margin.bottom;
-     
     var svg = d3.select(".density")
         .attr("width", width + margin.left + margin.right)
         .attr("height", height + margin.top + margin.bottom)
-    
     var g = svg.append('g')
         .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')')
-    
-    var x = d3.scaleLinear()
-        .rangeRound([0, width])
-    var y = d3.scaleLinear()
-        .rangeRound([height, 0])
-    
- 
-    // Compute kernel density estimation
-    var kde = kernelDensityEstimator(kernelEpanechnikov(7), x.ticks(60))
-    var control =  kde(data
-        .filter( function(d){return d.x == 0} )
-        .map(function(d){  return d.y; }) )
-    var cases =  kde(data
-        .filter( function(d){return d.x == 1} )
-        .map(function(d){  return d.y; }) )
-
-
-    x.domain(d3.extent(control, function(d) { return d[0]; }))
-    y.domain([0,0.12] )//d3.extent(control, function(d) { return d[1]; }))
-    
+     
     // x axis 
+    var x = d3.scaleLinear()
+        .domain(d3.extent(data.map(function(d){return d.y;}))).nice()
+        .rangeRound([0, width])
+    
+    var bins = d3.histogram()
+        .value(function(d){return d.y;})
+        .domain(x.domain())
+        .thresholds(x.ticks(40))
+
+    var total_bins = bins(data)
+    
+    // y axis 
+    var y = d3.scaleLinear()
+        .domain([0, 0.12])//d3.max(total_bins, function(d){ return d.length })/data.length])
+        .rangeRound([height, 0]);
+    
+    var line = d3.line()
+        .curve(d3.curveBasis)
+        .x(function(d){ return x(d[0]); })
+        .y(function(d){ return y(d[1]); });
+
+    var density = kernelDensityEstimator(epanechnikovKernel(7), x.ticks(40), data.map(function(d){return +d.y}));
+    //let total_density = kde(data.map(function(d){return +d.y;}));
+    //let case_density = kde(case_objects_list.map(function(d){ return +d.y; }));
+    //let control_density = kde(control_objects_list.map(function(d){ return +d.y;}));
+    
+    let count = 0; 
+    for(var i of density){
+        console.log(i);
+        count++;
+        if(count > 50){
+            break;
+        }
+    }
     g.append('g')
         .attr('class', 'axis axis-x')
-        .attr("transform", "translate(0," + height + ")")
-        .call(d3.axisBottom(x).tickPadding(8))
- 
-    // y axis 
+        .attr('transform', 'translate(0,' + height + ')')
+        .call(d3.axisBottom(x).tickPadding(8));
+
     g.append('g')
         .attr('class', 'axis axis-y')
         .call(d3.axisLeft(y).tickPadding(8))
-    
+
+
+    // Plot Bars
+    g.selectAll('rect')
+        .data(total_bins)
+            .enter()
+            .append('rect')
+            .attr('x',  function(d){ return x(d.x0) + 1})
+            .attr('y', function(d) { return  y(d.length/data.length)})
+            .attr('width', function(d){ return Math.abs(x(d.x1) - x(d.x0) -1)})
+            .attr('height', function(d){ return y(0) - y(d.length/data.length)});
     // Plot the area
     g.append("path")
         .attr("class", "mypath")
-        .datum(control)
+        .datum(density)
         .attr("fill", "blue")
-        .attr("opacity", ".3")
+        .attr("opacity", ".2")
         .attr("stroke", "blue")
-        .attr("stroke-width", 3)
+        .attr("stroke-width", 1)
         .attr("stroke-linejoin", "round")
-        .attr("d",  d3.line()
-            .curve(d3.curveBasis)
-            .x(function(d) { return x(d[0]); })
-            .y(function(d) { return y(d[1]); })
-        );
+        .attr("d", line); 
+
+    /*
     // Plot the area
     g.append("path")
         .attr("class", "mypath")
-        .datum(cases)
+        .datum(control_density)
         .attr("fill", "#fa1100")
-        .attr("opacity", ".3")
+        .attr("opacity", ".2")
         .attr("stroke", "#fa1100")
-        .attr("stroke-width", 2)
+        .attr("stroke-width", 1)
         .attr("stroke-linejoin", "round")
-        .attr("d",  d3.line()
-            .curve(d3.curveBasis)
-            .x(function(d) { return x(d[0]); })
-            .y(function(d) { return y(d[1]); })
-        );
+        .attr("d", line); 
+    */
 }
-*/
+
 /*
      * Creates absolute risk curve with array of points supplied
      * [
@@ -176,7 +197,7 @@ function drawAbsoluteRiskCurve(data) {
         .y(function(d) { return y(d.y)})
    
     x.domain(d3.extent(data, function(d) { return d.percentile; }))
-    y.domain([0,1])//d3.extent(data, function(d) { return d.y ; }))
+    y.domain([0,1]) //d3.extent(data, function(d) { return d.y ; }))
 
     // text label for the y axis
     svg.append("text")
