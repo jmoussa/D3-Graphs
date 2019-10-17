@@ -47,3 +47,20 @@ svg {
   stroke-width: 2px;
   stroke-dasharray: 3,3;
 }
+
+.solid-line {
+  stroke-width: 2px;
+}
+
+.legend {
+    fill: white;
+    stroke: black;
+    opacity:0.8;
+}
+
+.case_area {
+    fill: red;
+}
+.control_area {
+    fill: blue;
+}
