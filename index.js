@@ -28,7 +28,7 @@ function loadFile() {
         let arr = cleanAndSortArray(parsed_json.stats_array)
         let raw_arr = parsed_json.stats_array
         drawAbsoluteRiskCurve(arr, 45) // TODO: 45 can be replaced by patient percentile value 
-        plotDensity(raw_arr, 0.053) // TODO: 0.053 can be replaced by patient absolute risk value
+        plotDensity(raw_arr, 0.14) // TODO: 0.053 can be replaced by patient absolute risk value
         drawROCCurve(raw_arr, parsed_json.disease, 'Male')
     }
 }
@@ -53,7 +53,12 @@ function cleanAndSortArray(data){
     return clean_arr;
 }
 
-
+function sortObjArrayByX(data){
+    data.sort(function(a,b){
+        return parseFloat(a.x) - parseFloat(b.x)
+    });
+    return data;
+}
 /*
  * Plots the Distribution of cases and controls
  * Bins all of the c/c and creates a histogram, 
@@ -61,12 +66,14 @@ function cleanAndSortArray(data){
  * 
  * Also calculates avg absolute risk of cases and controls / the population*
 */
+
 function plotDensity(data, patient_risk) {    
     
     let case_objects_list = data.filter(c => c.x == 1)
     let control_objects_list = data.filter(c => c.x == 0)
     console.log('Cases ' + case_objects_list.length)
     console.log('Controls ' + control_objects_list.length)
+
     let avg_risk = d3.mean(data.map(function(d){return d.y;})) 
 
     var svgWidth = 600, svgHeight = 400;
@@ -81,23 +88,27 @@ function plotDensity(data, patient_risk) {
         
     // x axis 
     var x = d3.scaleLinear()
-        .domain([-0.002, d3.extent(data.map(function(d){return d.y;}))[1]])//d3.extent(data.map(function(d){return d.y;})))
+        .domain([-0, d3.extent(data.map(function(d){return d.y;}))[1]])//d3.extent(data.map(function(d){return d.y;})))
         .rangeRound([0, width])
     
     var threshold = x.ticks(20);
     var case_len = case_objects_list.length
     switch(case_len){
         case case_len < 200:
-            threshold=x.ticks(15);
+            console.log('Less than 200');
+            threshold=x.ticks(10);
             break;
         case case_len < 500:
-            threshold=x.ticks(20);
+            console.log('Less than 500');
+            threshold=x.ticks(15);
             break;
         case case_len > 501:
-            threshold=x.ticks(25);
+            console.log('Greater than 500');
+            threshold=x.ticks(20);
             break;
         default:
-            threshold=x.ticks(20);
+            console.log('Default');
+            threshold=x.ticks(15);
             break;
     }
     var bin = d3.histogram()
@@ -115,7 +126,6 @@ function plotDensity(data, patient_risk) {
     var case_min = d3.min(case_bins, function(d){ return d.length }) / case_objects_list.length
     var control_min = d3.min(control_bins, function(d){ return d.length }) / control_objects_list.length
     var tru_min = case_min < control_min ? case_min : control_min;
-    
     
     // y axis 
     var y = d3.scaleLinear()
@@ -145,18 +155,29 @@ function plotDensity(data, patient_risk) {
         .x(function(d){return x(d.x0);})
         .y0(y(0))
         .y1(function(d){return y(d.length/control_objects_list.length);})
-
     
     // Set Axis'
     g.append('g')
         .attr('class', 'axis axis-x')
         .attr('transform', 'translate(0,' + height + ')')
-        .call(d3.axisBottom(x).tickPadding(8));
+        .call(d3.axisBottom(x).tickPadding(8).ticks(5));
 
+    /*
     g.append('g')
         .attr('class', 'axis axis-y')
         .call(d3.axisLeft(y).tickPadding(8).ticks(5).tickFormat(d3.format(".0%")))
-    
+    */
+
+    // y gridlines 
+    g.append('g')
+        .attr("class", "grid")
+        .call(d3.axisLeft(y)
+            .ticks(5)
+            .tickPadding(8)
+            .tickSize(-width)
+            .tickFormat(d3.format(".0%")))
+        .call(g => g.select(".domain").remove());
+
     /* 
     // Plot Bars
     g.selectAll('.rect_control')
@@ -195,13 +216,13 @@ function plotDensity(data, patient_risk) {
     case_gradient.append("stop")
         .attr('class', 'start')
         .attr("offset", "0%")
-        .attr("stop-color", "red")
+        .attr("stop-color", "rgb(235,160, 50)")
         .attr("stop-opacity", 1);
     case_gradient.append("stop")
         .attr('class', 'end')
         .attr("offset", "100%")
-        .attr("stop-color", "red")
-        .attr("stop-opacity", 0.01);
+        .attr("stop-color", "rgb(235,160, 50)")
+        .attr("stop-opacity", 0.2);
 
 
     var control_gradient = defs.append("linearGradient")
@@ -213,14 +234,13 @@ function plotDensity(data, patient_risk) {
     control_gradient.append("stop")
         .attr('class', 'start')
         .attr("offset", "0%")
-        .attr("stop-color", "blue")
+        .attr("stop-color", "rgb(31,166, 189)")
         .attr("stop-opacity", 1);
     control_gradient.append("stop")
         .attr('class', 'end')
         .attr("offset", "100%")
-        .attr("stop-color", "blue")
-        .attr("stop-opacity", 0.01);
-
+        .attr("stop-color", "rgb(31, 166, 189)")
+        .attr("stop-opacity", 0.2);
     // Plot the line 
     g.append("path")
         .attr("class", "mypath")
@@ -228,7 +248,7 @@ function plotDensity(data, patient_risk) {
         .attr('fill', 'none')
         .attr("opacity", ".8")
         .attr("stroke", "rgb(55,150,128)")
-        .attr("stroke-width", 3)
+        .attr("stroke-width", 2)
         .attr("stroke-linejoin", "round")
         .attr("d", line_case); 
     //Plot the area
@@ -237,7 +257,6 @@ function plotDensity(data, patient_risk) {
         .attr('fill', 'url(#caseGradient)')
         .attr("opacity", "1")
         .attr("d", area_case); 
-
     // Plot the line 
     g.append("path")
         .attr("class", "mypath")
@@ -245,7 +264,7 @@ function plotDensity(data, patient_risk) {
         .attr('fill', 'none')
         .attr("opacity", ".8")
         .attr("stroke", "rgb(55,150,128)")
-        .attr("stroke-width", 3)
+        .attr("stroke-width", 2)
         .attr("stroke-linejoin", "round")
         .attr("d", line_control); 
     //Plot the area
@@ -255,27 +274,27 @@ function plotDensity(data, patient_risk) {
         .attr("opacity", "1")
         .attr("d", area_control); 
 
-
     //LEGEND
     svg.append("circle")
-        .attr("cx",margin.left+width-20)
+        .attr("cx",width-30)
         .attr("cy",margin.top-25)
         .attr("r", 5)
-        .style("fill", "red")
+        .attr("fill", "rgb(235,160, 50)");
+    
     svg.append("circle")
-        .attr("cx",margin.left+width-20)
-        .attr("cy",margin.top-10)
+        .attr("cx",margin.left+width-40)
+        .attr("cy",margin.top-25)
         .attr("r", 5)
-        .style("fill", "blue")
+        .style("fill", "rgb(31,166, 189)")
 
     svg.append("text")
-        .attr("x", margin.left+width-10)
+        .attr("x", width-20)
         .attr("y", margin.top-25)
         .text(/*case_objects_list.length +*/ " Cases")
         .style("font-size", "14px").attr("alignment-baseline","middle")
     svg.append("text")
-        .attr("x", margin.left+width-10)
-        .attr("y", margin.top-10)
+        .attr("x", margin.left+width-30)
+        .attr("y", margin.top-25)
         .text(/*control_objects_list.length + */" Controls")
         .style("font-size", "14px")
         .attr("alignment-baseline","middle")
@@ -288,7 +307,7 @@ function plotDensity(data, patient_risk) {
         .attr("dy", "1em")
         .style("text-anchor", "beginning")
         .text("Absolute Risk"); 
-    
+     
     // y axis label 
     svg.append("text")
         .attr("transform", "rotate(-90)")
@@ -296,7 +315,8 @@ function plotDensity(data, patient_risk) {
         .attr("x", 0 - (height / 2))
         .attr("dy", "1.5em")
         .style("text-anchor", "end")
-        .text("Percent of Population*"); 
+        .text("Frequency"); 
+
 
     var bisectAbsRisk= d3.bisector(function(d) {
         return x(d.x1); 
@@ -309,13 +329,24 @@ function plotDensity(data, patient_risk) {
     var avg_case_item_y = case_bins[avg_case_item].length/case_objects_list.length;
     var avg_case_item_x =  case_bins[avg_case_item].x0
     
-    var patient_control_item = bisectAbsRisk(control_bins, x(patient_risk));
-    var patient_control_item_x =  control_bins[patient_control_item].x0
-    var patient_control_item_y = control_bins[patient_control_item].length/control_objects_list.length;
-    var patient_case_item = bisectAbsRisk(case_bins, x(patient_risk));
-    var patient_case_item_y = case_bins[patient_case_item].length/case_objects_list.length;
-    var patient_case_item_x =  case_bins[patient_case_item].x0
- 
+    
+    if(x(patient_risk) && x(patient_risk) < x(d3.extent(data.map(function(d){return d.y;}))[1])){
+        var patient_control_item = bisectAbsRisk(control_bins, x(patient_risk));
+        var patient_control_item_x =  control_bins[patient_control_item].x0
+        var patient_control_item_y = control_bins[patient_control_item].length/control_objects_list.length;
+        var patient_case_item = bisectAbsRisk(case_bins, x(patient_risk));
+        var patient_case_item_y = case_bins[patient_case_item].length/case_objects_list.length;
+        var patient_case_item_x =  case_bins[patient_case_item].x0
+    }else{
+        //ABNORMALLY HIGH RISK
+        var patient_control_item = bisectAbsRisk(control_bins, x(d3.extent(data.map(function(d){return d.y;}))[1]));
+        var patient_control_item_x =  control_bins[patient_control_item].x0
+        var patient_control_item_y = control_bins[patient_control_item].length/control_objects_list.length;
+        var patient_case_item = bisectAbsRisk(case_bins, x(d3.extent(data.map(function(d){return d.y;}))[1]));
+        var patient_case_item_y = case_bins[patient_case_item].length/case_objects_list.length;
+        var patient_case_item_x =  case_bins[patient_case_item].x0
+    
+    }
     // Tallest Lines
     var avg_tallest_y = avg_case_item_y > avg_control_item_y ? avg_case_item_y : avg_control_item_y;
     var patient_tallest_y = patient_case_item_y > patient_control_item_y ? patient_case_item_y : patient_control_item_y;
@@ -326,59 +357,80 @@ function plotDensity(data, patient_risk) {
         .attr('y1', y(avg_tallest_y)) 
         .attr("y2", height)
         .attr('class', 'solid-line')
-        .attr("stroke", 'orange') 
+        .attr('stroke-dasharray', '3,3')
+        .attr('stroke-width', 2)
+        .attr("stroke", 'white') 
     // Avg Absolute Risk Dots
     g.append('circle')
-        .attr('r', 4)
+        .attr('r', 5)
         .attr('cx', x(avg_control_item_x))
         .attr('cy', y(avg_tallest_y)) 
         .style('fill', 'orange')
-    /*
+        .style('stroke', 'white')
+        .style('stroke-width', 2)
     // Avg Text Label
     g.append("text")
         .attr("x", x(avg_control_item_x))
-        .attr("y", y(avg_tallest_y > 0.01 ? avg_tallest_y*1.03 : 0.015))
+        .attr("y", y(avg_tallest_y > 0.01 ? avg_tallest_y*1.04 : 0.04))
         .attr("text-anchor", "middle")  
-        .text("Population Average")
-        .style('font-size', '14px'); 
-    */ 
+        .text(avg_risk.toFixed(2))
+        .style('font-size', '14px')
+        .style('fill', 'orange');
+
     
-
-    // Patient Absolute Risk Line
-    g.append('line')
-        .attr('x1', x(patient_case_item_x))
-        .attr('x2', x(patient_case_item_x))
-        .attr('y1', y(patient_tallest_y))  // cases
-        .attr("y2", height)
-        .attr('class', 'solid-line')
-        .attr("stroke", 'blue') 
-    // Patient Absolute Risk Dot
-    g.append('circle')
-        .attr('r', 4)
-        .attr('cx', x(patient_control_item_x) )
-        .attr('cy', y(patient_tallest_y)) 
-        .style('fill', 'blue')
     /* 
-    // Patient Text Label
-    g.append("text")
-        .attr("x", x(patient_control_item_x))
-        .attr("y", y(patient_tallest_y > 0.01 ? patient_tallest_y*1.03 : 0.03))
-        .attr("text-anchor", "middle")  
-        .text("YOU")
-        .style('font-size', '12px')  
-        .style('font-color', 'white')
-    */ 
+     * PATIENT LINE (CURRENTLY OUT OF DESIGN)
+    if(x(patient_risk) && x(patient_risk) < x(d3.extent(data.map(function(d){return d.y;}))[1])){
+        // Patient Absolute Risk Line (CASE)
+        g.append('line')
+            .attr('x1', x(patient_case_item_x))
+            .attr('x2', x(patient_case_item_x))
+            .attr('y1', y(patient_tallest_y))  // cases
+            .attr("y2", height)
+            .attr('class', 'solid-line')
+            .attr("stroke", 'rgb(55,170, 242)') 
+            .attr('stroke-dasharray', '3,3')
+            .attr('stroke-width', 2)
+        // Patient Absolute Risk Dot
+        g.append('circle')
+            .attr('r', 5)
+            .attr('cx', x(patient_case_item_x) )
+            .attr('cy', y(patient_tallest_y)) 
+            .style('fill', 'rgb(55,170, 242)')
+            .style('stroke', 'white')
+            .style('stroke-width', 2)
 
 
-    /* 
-    // TITLE 
-    svg.append("text")
-        .attr("x", (width / 2))             
-        .attr("y", 0 - (margin.top / 2))
-        .attr("text-anchor", "middle")  
-        .style("font-size", "18px") 
-        .text("Risk Score Distribution");
+        // Patient Absolute Risk Line (CONTROL)
+        g.append('line')
+            .attr('x1', x(patient_control_item_x))
+            .attr('x2', x(patient_control_item_x))
+            .attr('y1', y(patient_tallest_y))  // cases
+            .attr("y2", height)
+            .attr('class', 'solid-line')
+            .attr("stroke", 'rgb(55,170, 242)') 
+            .attr('stroke-dasharray', '3,3')
+            .attr('stroke-width', 2)
+        // Patient Absolute Risk Dot
+        g.append('circle')
+            .attr('r', 5)
+            .attr('cx', x(patient_control_item_x ) )
+            .attr('cy', y(patient_tallest_y)) 
+            .style('fill', 'rgb(55,170, 242)')
+            .style('stroke', 'white')
+            .style('stroke-width', 2)
+
+        // Patient Text Label
+        g.append("text")
+            .attr("x", x(patient_control_item_x))
+            .attr("y", y(patient_tallest_y > 0.01 ? patient_tallest_y*1.035 : patient_tallest_y+0.03))
+            .attr("text-anchor", "middle")  
+            .text(patient_risk)
+            .style('font-size', '14px')
+            .style('fill', 'rgb(55,170, 242)');
+    }    
     */
+    
 }
 
 function drawROCCurve(data, disease, sex){
@@ -387,12 +439,12 @@ function drawROCCurve(data, disease, sex){
 
     for(var i of data){
         if (disease == 'breast'){
-            if(sex == 'Female'){
+            if(i.sex == 'Female'){
                 case_control.push(i.x)
                 scores.push(i.y)
             }
         }else if(disease == 'testicular' || disease == 'prostate'){
-            if(sex == 'Male'){
+            if(i.sex == 'Male'){
                 case_control.push(i.x)
                 scores.push(i.y)
             }
@@ -401,8 +453,6 @@ function drawROCCurve(data, disease, sex){
             scores.push(i.y)
         }
     }
-    var fpr = []
-    var tpr = []
     var roc_objects = []
     var thresholds =  []
     let inc = 0
@@ -412,6 +462,7 @@ function drawROCCurve(data, disease, sex){
     }
     var P = case_control.reduce((a,b) => a+b, 0)
     var N = case_control.length - P
+    
     for(var cutoff of thresholds){
         let FP=0
         let TP=0
@@ -426,21 +477,18 @@ function drawROCCurve(data, disease, sex){
             }
             
         }
-        fpr.push(FP/parseFloat(N))
-        tpr.push(TP/parseFloat(P))
         roc_objects.push({
             x: FP/parseFloat(N),
             y: TP/parseFloat(P)
         });
     }
-    let auc = 0;//TODO: COMPLETE THIS EQUATION
     console.log('POINTS: ' + roc_objects.length)
-    console.log(roc_objects[59])
+    roc_objects = sortObjArrayByX(roc_objects)
     var svgWidth = 600, svgHeight = 600;
     var margin = {top: 80, right:80, bottom:80, left: 80};
     var width = svgWidth -  margin.left - margin.right;
     var height = svgHeight - margin.top - margin.bottom;
-
+    
     var svg = d3.select('.roc') 
         .attr('width', svgWidth)
         .attr('height', svgHeight)
@@ -460,7 +508,6 @@ function drawROCCurve(data, disease, sex){
         .curve(d3.curveBasis)
         .x(function(d) { return x(d.x)})
         .y(function(d) { return y(d.y)})
-   
  
     // Y axis label 
     svg.append("text")
@@ -484,13 +531,15 @@ function drawROCCurve(data, disease, sex){
         .attr('class', 'axis axis-x')
         .attr('transform', 'translate(0,' + height + ')')
         .call(d3.axisBottom(x).tickPadding(8).ticks(5))
-        //.select('.domain')
-        //.remove()
     
     // y axis 
     g.append('g')
-        .attr('class', 'axis axis-y')
-        .call(d3.axisLeft(y).tickPadding(8).ticks(5))
+        .attr("class", "grid")
+        .call(d3.axisLeft(y)
+            .ticks(5)
+            .tickPadding(8)
+            .tickSize(-width))
+        .call(g => g.select(".domain").remove());
     
     // line
     g.append('path')
@@ -499,17 +548,19 @@ function drawROCCurve(data, disease, sex){
         .attr('stroke', 'rgb(55,150,128)')
         .attr('stroke-linejoin', 'round')
         .attr('stroke-linecap', 'round')
-        .attr('stroke-width', 3)
+        .attr('stroke-width', 2)
         .attr('d', line)
     
     var xy = [
         {x:0, y:0},
         {x:1, y:1}
     ]
+
     g.append('path')
         .datum(xy)
         .attr('fill', 'none')
         .attr('stroke', 'black')
+        .attr('stroke-opacity', 0.3) 
         .attr('stroke-linejoin', 'round')
         .attr('stroke-linecap', 'round')
         .attr('stroke-width', 2)
@@ -518,8 +569,60 @@ function drawROCCurve(data, disease, sex){
             .x(function(d) { return x(d.x)})
             .y(function(d) { return y(d.y)})
         ); 
-     
+    
+    var bisectROC = d3.bisector(function(d) { return d.x; }).left
+   
+    // LINES WHILE HOVERING 
+    var focus = g.append('g')
+		.attr('class','focus')
+		.style('display', 'none') 
 
+	focus.append('line')
+		.attr('class', 'x-hover-line hover-line')
+		.attr('y1', 0)
+		.attr('y2', height);
+    
+    focus.append('line')
+		.attr('class', 'y-hover-line hover-line')
+		.attr('x1', 0)
+		.attr('x2', 0)
+
+    focus.append('circle')
+        .style('stroke', 'rgb(248,248,248)')
+        .style('stroke-width', 2)
+        .attr('r', 4)
+
+     // SETUP OVERLAY TO TRACK MOUSE MOVEMENTS
+    svg.append('rect')
+        .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')')
+        .attr('class', 'overlay')
+        .attr('width', width)
+        .attr('height', height)
+        .on('mouseover', function(){focus.style('display', null);})
+        .on('mouseout', function(){focus.style('display', 'none');})
+        .on('mousemove', mousemove)
+    // END TOOLTIP INIT
+    
+    function mousemove(){
+        var x0 = x.invert(d3.mouse(this)[0])
+        var list = roc_objects.map(l=>l.x)
+        var i = d3.bisect(list, x0) < 101 ? d3.bisect(list, x0) : 100
+        var d0 = roc_objects[i - 1]
+        var d1 = roc_objects[i]
+        //console.log(d0) 
+        //console.log(d1)
+        if(d0 != undefined && d1 != undefined){
+            var d = x0 - d0.x >= d1.x - x0 ? d1 : d0;
+            //shift point
+            focus.attr("transform", "translate(" + x(d.x) + "," + y(d.y) + ")");
+            //format text
+            //focus.select(".text1").html(function() { return '%ile: ' + d.percentile; });
+            //focus.select(".text2").html(function() { return 'PRS: ' + d.y.toFixed(2); });
+            // add x/y axis trace lines
+            focus.select(".x-hover-line").attr("y2", height - y(d.y));
+            focus.select(".y-hover-line").attr("x2", - (x(d.x)));
+        }
+    }
 }
 
 
@@ -591,9 +694,15 @@ function drawAbsoluteRiskCurve(data, patient_percentile) {
     
     // y axis 
     g.append('g')
-        .attr('class', 'axis axis-y')
-        .call(d3.axisLeft(y).tickPadding(8).ticks(5))
-    
+        .attr("class", "grid")
+        .call(d3.axisLeft(y)
+            .ticks(5)
+            .tickPadding(8)
+            .tickSize(-width)
+            //.tickFormat(d3.format(".0%"))
+        )
+        .call(g => g.select(".domain").remove());
+
     // line
     g.append('path')
         .datum(data)
@@ -601,7 +710,7 @@ function drawAbsoluteRiskCurve(data, patient_percentile) {
         .attr('stroke', 'rgb(55,150,128)')
         .attr('stroke-linejoin', 'round')
         .attr('stroke-linecap', 'round')
-        .attr('stroke-width', 3)
+        .attr('stroke-width', 2)
         .attr('d', line)
          
     // PATIENT PERCENTILE LINE AND POINT  
@@ -612,15 +721,17 @@ function drawAbsoluteRiskCurve(data, patient_percentile) {
         .attr('y1', y(item.y)) 
         .attr("y2", height)
         .attr('stroke-dasharray', '3,3') 
-        .attr('stroke', 'blue')
+        .attr('stroke', 'rgb(55,170, 242)')
         .attr('stroke-width', '2') 
     
     g.append('circle')
         .attr('r', 4)
         .attr('cx', x(patient_percentile) )
         .attr('cy', y(item.y)) 
-        .style('fill', 'blue')
-    
+        .style('fill', 'rgb(55,170, 242)')
+        .style('stroke', 'rgb(248,248,248)')
+        .style('stroke-width', 2)
+            
     
     // LINES WHILE HOVERING 
     var focus = g.append('g')
@@ -638,8 +749,10 @@ function drawAbsoluteRiskCurve(data, patient_percentile) {
 		.attr('x2', 0)
 
     focus.append('circle')
-        .attr('r', 2)
-    
+        .style('stroke', 'rgb(248,248,248)')
+        .style('stroke-width', 2)
+        .attr('r', 4)
+    /*    
     // TOOLTIP INIT
     focus.append("rect")
         .attr("class", "tooltip")
@@ -663,7 +776,7 @@ function drawAbsoluteRiskCurve(data, patient_percentile) {
         .attr('x', 15)
         .attr('y', -15)
         .attr('font-size', '14px')//'0.82rem')
-    
+    */ 
     // SETUP OVERLAY TO TRACK MOUSE MOVEMENTS
     svg.append('rect')
         .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')')
@@ -680,12 +793,12 @@ function drawAbsoluteRiskCurve(data, patient_percentile) {
           i = bisectPercentile(data, x0, 1),
           d0 = data[i - 1],
           d1 = data[i],
-          d = x0 - d0.percentile == d1.percentile - x0 ? d1 : d0;
+          d = x0 - d0.percentile >= d1.percentile - x0 ? d1 : d0;
           //shift point
           focus.attr("transform", "translate(" + x(d.percentile) + "," + y(d.y) + ")");
           //format text
-          focus.select(".text1").html(function() { return '%ile: ' + d.percentile; });
-          focus.select(".text2").html(function() { return 'PRS: ' + d.y.toFixed(2); });
+          //focus.select(".text1").html(function() { return '%ile: ' + d.percentile; });
+          //focus.select(".text2").html(function() { return 'PRS: ' + d.y.toFixed(2); });
           // add x/y axis trace lines
           focus.select(".x-hover-line").attr("y2", height - y(d.y));
           focus.select(".y-hover-line").attr("x2", - (x(d.percentile)));
