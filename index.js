@@ -29,7 +29,7 @@ function loadFile() {
         let raw_arr = parsed_json.stats_array
         drawAbsoluteRiskCurve(arr, 9, 'Female') // TODO: 45 can be replaced by patient percentile value 
         plotDensity(raw_arr, 0.269, 'Female') // TODO: 0.053 can be replaced by patient absolute risk value
-        //drawROCCurve(raw_arr, parsed_json.disease, 'Male') 
+        drawROCCurve(raw_arr, parsed_json.disease, 'Male') 
     }
 }
 
